@@ -1,0 +1,17 @@
+---
+title: "IMPC_parameter_description_clean"
+format: html
+---
+
+##Overview: What to clean in the CSV file to make it easily interpretable for SQL##
+
+
+
+```{r}
+library(tidyverse)
+library(tidyr)
+
+# locate IMPC_Prfile 
+all_data<- list.files(pattern = '*.csv',path = "../group5/data/", full.names = TRUE)
+```
+

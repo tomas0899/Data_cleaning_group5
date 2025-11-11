@@ -1,0 +1,296 @@
+---
+title: "data_cleaning_v1"
+format: html
+---
+
+**PREP data for cleaning**
+1. establish current directory and find directory of all CSV files 
+2. establish the column name order of master CSV file 
+3. create an empty dfs list
+4. start a For loop:
+  5. read CSV file - ensure HEADERS False (for later column naming)
+  6. transpose the data - columns turn into rows (data), rows turn into columns (column names)
+    a.ensure it is done as.data.frame
+  8. Assign new column names - first row after transposition
+  9. remove original HEADER row  of data frame of that CSV file is V1,V2,V3 ETC (bc of header FALSE) - so REMOVE IT 
+  10. Do the columns follow the same order, are any data values missing in the CSV file?
+    a. For loop - create variable col - and iterate through col_names (list of column titles made earlier)
+    b. if col != col_name = empty = replace with NA
+      i. df_t[[col]] - square bracket - changes an element
+  11. Then re-order and match the column order of dfs as col_order
+  12. Add the CSV file from df_t for loop iteration into the dfs + add 1 more row to the length of dfs (for next)
+  13. Bind all rows of list into dataframe - makes longer result.
+  14. Ensure MGI + Mouse strain is uppercase uppercase
+
+
+```{r}
+library(tidyverse)
+library(tidyr)
+
+
+
+
+# locate file 
+all_data<- list.files(pattern = '*.csv',path = "../group5/data/", full.names = TRUE)
+
+# generate random sample of 10% of data (~29k files) to work with 
+set.seed(88880888)
+working_data <- sample(all_data, 300, replace = FALSE, prob = NULL)
+
+#unique(sampling_data)
+
+
+col_order <- c("gene_accession_id","analysis_id", "gene_symbol", "mouse_strain", "mouse_life_stage", "parameter_id", "parameter_name" , "pvalue")
+
+#Change the path where the files are located
+
+dfs <- list()
+#make an empty list for the loop
+
+for (path in working_data){
+  df <- read.csv(path, header = FALSE, stringsAsFactors = FALSE)
+  #header = FALSE: V1,V2,V3,V4 are the HEADERS 
+    # r reads the files - after transposing - as FIRST ROW OF DATA = later becoming the column names
+  
+  #transpose the data as a dataframe into dfs
+  df_t <- as.data.frame(t(df), stringsAsFactors = FALSE)
+  
+  #ASSIGNING COLUMN NAMES - as  first row after transposition
+  colnames(df_t) <- df_t[1,] 
+  
+  df_t <- df_t[-1, ] #removing the original header row
+  
+  
+  for (col in col_order){
+    # create variable called col so that it can iterate through col_order
+    
+    if (!col %in% colnames(df_t)){
+      df_t[[col]] <- NA # ensure every dataframe (row) has same columns by adding missing ones as NA, so that they can be merged row-wise
+      #col - already represented as one of the col_order variables which IF THEY ARE NOT one of the colnames in df_t, then create an NA group for it in that area
+                
+    }
+  }
+
+  
+  df_t <- df_t[,col_order] #re-order and match the columns in the same order as col_order
+  #add row to list
+  dfs[[length(dfs) + 1]] <- df_t
+  # puts the df_t csv file (from this current for loop iteration) into the dfs list
+  # stores the WHOLE DATAFRAME as one item in the list
+}
+  
+
+
+
+merged_df <- bind_rows(dfs)
+
+# Write output to new CSV
+write.csv(merged_df, "merged_transposed.csv", row.names = FALSE)
+merged_df <- as.data.frame(merged_df)
+
+names <- colnames(merged_df)
+
+
+for (x in names){
+  print(unique(merged_df[[x]]))
+}
+
+#uppercase for gene_accession_id and mouse_strain
+
+merged_df$gene_accession_id <- toupper(merged_df$gene_accession_id)
+
+
+```
+
+** SOP Normalization** ALL TESTED ON SAMPLE DATASET FIRST
+
+1. Convert column header into lowercase
+2. ensure dataType is consistant 
+3. Ensure minValue/maxValue is Consistant 
+4. start with string + move onto pvalue (as.numeric for float)
+cdv- column data valid (abbreviated variable)
+
+*NOTE - ADAPTED FROM https://www.ucl.ac.uk/~ucjtwyc/teaching/Intro_R_Programming_Jan2012.pdf? = UCL LECTURE on R programming concepts. AND reddit thread: https://www.reddit.com/r/rstats/comments/azumgy/is_there_a_summarylike_function_which_gives_nchar/ *
+
+```{r}
+library(tidyverse)
+library(tidyr)
+
+##ANALYSIS ID##
+
+cvd <- function(x, dataType, minValue, maxValue) {
+  if (tolower(dataType) == "string")
+    return(which(nchar(x) < minValue | nchar(x) > maxValue))
+}
+
+cvd(merged_df$analysis_id , "STRING", 15, 15)
+#returned integer = 0 - meaning that NO analysis_id exceeded the number of characters (nchar)
+
+##GENE_ACCESSSION_ID##
+
+
+cvd <- function(x, dataType, minValue, maxValue) {
+  if (tolower(dataType) == "string")
+    which(nchar(x) < minValue | nchar(x) > maxValue)
+}
+
+cvd(merged_df$gene_accession_id , "STRING", 9, 11)
+#returned integer = 0 - meaning that NO analysis_id exceeded the number of characters (nchar)
+
+
+##GENE_SYMBOL##
+cvd <- function(x, dataType, minValue, maxValue) {
+  if (tolower(dataType) == "string")
+    which(nchar(x) < minValue | nchar(x) > maxValue)
+}
+
+cvd(merged_df$gene_symbol , "STRING", 1, 13)
+#returned integer = 0 - meaning that NO gene_symbol exceeded the number of characters (nchar)
+
+
+##MOUSE_STRAIN##
+
+strain <- c("C57BL", "B6J", "C3H", "129SV")
+mouse_strains<- merged_df$mouse_strain
+
+cvd <- function(x, dataType) {
+  if (tolower(dataType) == "string")
+    which(!mouse_strains %in% strain)
+}
+
+ cvd(merged_df$gene_symbol , "STRING")
+#this shows that rows 93 and 300 show mouse strains which are FALSE - not a part of the strains listed in the SOP or strains list
+merged_df[93,]
+merged_df[300,]
+# rows 93 and 300 - MOUSE STRAIN = C51BL + is this an error?
+
+
+##MOUSE_LIFE_STAGE##
+stage <- c("E12.5", "E15.5", "E18.5", "E9.5", "Early adult", "Late adult", "Middle aged adult")
+mouse_stage<- merged_df$mouse_life_stage
+
+cvd <- function(x, dataType) {
+  if (tolower(dataType) == "string")
+    return(which(!mouse_stage %in% stage))
+}
+cvd(mouse_stage , "STRING")
+#this shows that rows 12 and 87 show mouse strains not mentioned in the stage array 
+merged_df[12,]
+  # error on line 12 is due to capital casing issue
+merged_df[87,]
+  # error on line 87 - NA
+
+##PAPRAMETER ID##
+cvd <- function(x, dataType, minValue, maxValue) {
+  if (tolower(dataType) == "string")
+    which(nchar(x) < minValue | nchar(x) > maxValue)
+}
+
+cvd(merged_df$parameter_id , "STRING", 15, 20)
+#returned integer = 0 - meaning that NO parameter_id  exceeded the number of characters (nchar)
+
+
+##parameter_name##
+cvd <- function(x, dataType, minValue, maxValue) {
+  if (tolower(dataType) == "string")
+    return(which(nchar(x) < minValue | nchar(x) > maxValue))
+}
+
+cvd(merged_df$parameter_name , "STRING", 2, 74)
+#returned integer = 0 - meaning that NO parameter_id  exceeded the number of characters (nchar)
+
+
+##PVALUE##
+
+cvd <- function(x, dataType, minValue, maxValue) {
+  if (tolower(dataType) == "float")
+    return(which(x < minValue | x > maxValue))
+}
+
+cvd(merged_df$pvalue , "FLOAT", 0, 1)
+merged_df$pvalue <- as.
+#returned rows = 55. 91 - meaning that pvalues on these rows exceeded 1 or less than 0
+merged_df[55,] # row 55 , pvalue = 1.338161 (error)?
+merged_df[91,] #row 91, pvalue = 1.468044
+
+```
+
+** FIND THE NA's and DUPLICATES OF ALL ROWS**
+1. remove all duplicates
+2. SOP - Datatype conversion
+3. Find NA's in columns of data 
+4. plot NA
+
+```{r}
+library(ggplot2)
+
+
+colnames(merged_df) <- tolower(colnames(merged_df))
+head(merged_df)
+
+col_strings_ty<- merged_df[,1:6]
+
+
+for (headline in col_strings_ty){
+  as.character(merged_df$headline)
+}
+
+options(scipen=888)
+merged_df$pvalue <- as.double(merged_df$pvalue)
+
+
+
+
+
+
+
+duplicates <- duplicated(merged_df)
+if (duplicates == TRUE){
+  return(duplicates)
+}
+
+
+
+
+
+
+
+
+
+na_counts <- lapply(merged_df, function(x) sum(is.na(x)))
+print(na_counts)
+
+na_df <- data.frame(column = names(na_counts),
+                    na_count =  as.numeric(na_counts)
+)
+
+
+ggplot(na_df, aes(reorder(column, -na_count), y = na_count))+
+  geom_histogram(stat = 'summary')
+
+```
+
+
+
+** Disease information.CSV - CLEANING **
+
+1. Proof reading and normalization - check datatypes, caps, column 
+2. convert into lower case
+3. check for NA
+
+```{r}
+dis_inf <- read.csv("../group5/Disease_information.csv", header = FALSE, sep =",", stringsAsFactors = FALSE)
+str(dis_inf)
+#check data types
+as.character(dis_inf)
+str(dis_inf)
+
+colnames(dis_inf) <- tolower(colnames(dis_inf))
+
+
+col_order <- c("Mouse MGI ID","DO Disease ID", "DO Disease Name", "OMIM IDs")
+
+```
+
+
+**IMPC proceducre
