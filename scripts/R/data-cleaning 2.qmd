@@ -1,0 +1,102 @@
+---
+title: "data_cleaning_v1"
+format: html
+---
+
+**PREP data for cleaning**
+1. establish current directory and find directory of all CSV files 
+2. establish the column name order of master CSV file 
+3. create an empty dfs list
+4. start a For loop:
+  5. read CSV file - ensure HEADERS False (for later column naming)
+  6. transpose the data - columns turn into rows (data), rows turn into columns (column names)
+    a.ensure it is done as.data.frame
+  8. Assign new column names - first row after transposition
+  9. remove original HEADER row  of data frame of that CSV file is V1,V2,V3 ETC (bc of header FALSE) - so REMOVE IT 
+  10. Do the columns follow the same order, are any data values missing in the CSV file?
+    a. For loop - create variable col - and iterate through col_names (list of column titles made earlier)
+    b. if col != col_name = empty = replace with NA
+      i. df_t[[col]] - square bracket - changes an element
+  11. Then re-order and match the column order of dfs as col_order
+  12. Add the CSV file from df_t for loop iteration into the dfs + add 1 more row to the length of dfs (for next)
+  13. Bind all rows of list into dataframe - makes longer result.
+  
+
+
+```{r}
+library(tidyverse)
+library(tidyr)
+
+
+
+
+# locate files to data
+all_data<- list.files(pattern = '*.csv',path = "../group5/data/", full.names = TRUE)
+
+# generate random sample of 10% of data (~29k files) to work with 
+set.seed(88880888)
+sampling_data <- list(sample(all_data, 300, replace = FALSE, prob = NULL))
+
+#unique(sampling_data)
+
+
+
+
+col_order <- c("analysis_id","gene_accession_id", "gene_symbol", "mouse_strain", "mouse_life_stage", "parameter_id", "pvalue", "parameter_name")
+
+#Change the path where the files are located
+
+dfs <- list()
+#make an empty list for the loop
+
+for (i in sampling_data){
+  df <- read.csv(sampling_data[i], header = FALSE, stringsAsFactors = FALSE)
+  #header = FALSE: V1,V2,V3,V4 are the HEADERS 
+    # r reads the files - after transposing - as FIRST ROW OF DATA = later becoming the column names
+  
+  #transpose the data as a dataframe into dfs
+  df_t <- as.data.frame(t(df), stringsAsFactors = FALSE)
+  
+  #ASSIGNING COLUMN NAMES - as  first row after transposition
+  colnames(df_t) <- df_t[1,] 
+  
+  df_t <- df_t[-1, ] #removing the original header row
+  
+  
+  for (col in col_order){
+    # create variable called col so that it can iterate through col_order
+    
+    if (!col %in% colnames(df_t)){
+      df_t[[col]] <- NA # ensure every dataframe (row) has same columns by adding missing ones as NA, so that they can be merged row-wise
+      #col - already represented as one of the col_order variables which IF THEY ARE NOT one of the colnames in df_t, then create an NA group for it in that area
+                
+    }
+  }
+
+  
+  df_t <- df_t[,col_order] #re-order and match the columns in the same order as col_order
+  #add row to list
+  dfs[[length(dfs) + 1]] <- df_t
+  # puts the df_t csv file (from this current for loop iteration) into the dfs list
+  # stores the WHOLE DATAFRAME as one item in the list
+    
+}
+  
+
+merged_df <- bind_rows(dfs)
+?bind_rows()
+
+# Write output to new CSV
+write.csv(merged_df, "merged_transposed.csv", row.names = FALSE)
+merged_df
+
+
+
+
+str(merged_df)
+as.data.frame(merged_df)
+
+
+
+```
+
