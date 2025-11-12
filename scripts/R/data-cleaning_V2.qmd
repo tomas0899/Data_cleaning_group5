@@ -1,0 +1,437 @@
+---
+title: "data_cleaning_v1"
+format: html
+---
+
+**PREP data for cleaning**
+1. establish current directory and find directory of all CSV files 
+2. establish the column name order of master CSV file 
+3. create an empty dfs list
+4. start a For loop:
+  5. read CSV file - ensure HEADERS False (for later column naming)
+  6. transpose the data - columns turn into rows (data), rows turn into columns (column names)
+    a.ensure it is done as.data.frame
+  8. Assign new column names - first row after transposition
+  9. remove original HEADER row  of data frame of that CSV file is V1,V2,V3 ETC (bc of header FALSE) - so REMOVE IT 
+  10. Do the columns follow the same order, are any data values missing in the CSV file?
+    a. For loop - create variable col - and iterate through col_names (list of column titles made earlier)
+    b. if col != col_name = empty = replace with NA
+      i. df_t[[col]] - square bracket - changes an element
+  11. Then re-order and match the column order of dfs as col_order
+  12. Add the CSV file from df_t for loop iteration into the dfs + add 1 more row to the length of dfs (for next)
+  13. Bind all rows of list into dataframe - makes longer result.
+  14. Ensure MGI + Mouse strain is uppercase uppercase
+
+
+```{r}
+library(tidyverse)
+library(tidyr)
+
+
+
+
+# locate file 
+all_data<- list.files(pattern = '*.csv',path = "../group5/data/", full.names = TRUE)
+
+# generate random sample of 10% of data (~29k files) to work with 
+#set.seed(88880888)
+#working_data <- sample(all_data, 300, replace = FALSE, prob = NULL)
+
+
+col_order <- c("gene_accession_id","analysis_id", "gene_symbol", "mouse_strain", "mouse_life_stage", "parameter_id", "parameter_name" , "pvalue")
+
+#Change the path where the files are located
+
+dfs <- list()
+#make an empty list for the loop
+
+for (path in all_data){
+  df <- read.csv(path, header = FALSE, stringsAsFactors = FALSE)
+  #header = FALSE: V1,V2,V3,V4 are the HEADERS 
+    # r reads the files - after transposing - as FIRST ROW OF DATA = later becoming the column names
+  
+  #transpose the data as a dataframe into dfs
+  df_t <- as.data.frame(t(df), stringsAsFactors = FALSE)
+  
+  #ASSIGNING COLUMN NAMES - as  first row after transposition
+  colnames(df_t) <- df_t[1,] 
+  
+  df_t <- df_t[-1, ] #removing the original header row
+  
+  
+  for (col in col_order){
+    # create variable called col so that it can iterate through col_order
+    
+    if (!col %in% colnames(df_t)){
+      df_t[[col]] <- NA # ensure every dataframe (row) has same columns by adding missing ones as NA, so that they can be merged row-wise
+      #col - already represented as one of the col_order variables which IF THEY ARE NOT one of the colnames in df_t, then create an NA group for it in that area
+                
+    }
+  }
+
+  
+  df_t <- df_t[,col_order] #re-order and match the columns in the same order as col_order
+  #add row to list
+  dfs[[length(dfs) + 1]] <- df_t
+  # puts the df_t csv file (from this current for loop iteration) into the dfs list
+  # stores the WHOLE DATAFRAME as one item in the list
+}
+  
+
+
+merged_df <- bind_rows(dfs)
+
+# Write output to new CSV
+write.csv(merged_df, "merged_transposed.csv", row.names = FALSE)
+merged_df <- as.data.frame(merged_df)
+
+##################find all NA values######################################
+na_counts <- lapply(merged_df, function(x) sum(is.na(x)))
+print(na_counts)
+
+na_df <- data.frame(column = names(na_counts),
+                    na_count =  as.numeric(na_counts)
+)
+
+#loop helps to find inconsistancies - sometimes lower/upper case changes in mouse_life_stage or mouse_Strain# and for finding NA's in these categories
+names <- c("mouse_strain", "mouse_life_stage")
+for (x in names){
+  print(unique(merged_df[[x]]))
+}
+
+
+colnames(merged_df) <- tolower(colnames(merged_df))
+#Ensure all column headers are lowercaseu
+merged_df$parameter_id <- toupper(merged_df$parameter_id)
+
+
+```
+
+
+## SOP Normalization** ALL TESTED ON SAMPLE DATASET FIRST
+
+1. Generate SOP database to run checks against
+2. generate function which checks string vs float (according to SOP) + authorise based on number of characters/constraints required 
+3. ensure consistant datatype, min max character count, constraints.
+
+```{r}
+library(tidyverse)
+library(tidyr)
+library(stringr)   # for str_to_title()
+
+#############################################################################################################################################################################################################
+
+#create dataframe called sop + have parameters of IMPC_SOP in dataframe#
+sop <- list(
+  analysis_id = list(type = "string", minValue = 15, maxValue = 15, constraints = c()),
+  gene_accession_id = list(type = "string", minValue = 9, maxValue = 11, constraints = c()),
+  gene_symbol = list(type = "string", minValue = 1, maxValue = 13, constraints = c()),
+  mouse_strain = list(type = "string", minValue = 3, maxValue = 5, constraints = c("C57BL", "B6J", "C3H", "129SV")),
+  mouse_life_stage = list(type = "string", minValue = 4, maxValue = 17, constraints = c("E12.5", "E15.5", "E18.5", "E9.5", "Early adult", "Late adult", "Middle aged adult")),
+  parameter_id = list(type = "string", minValue = 15, maxValue = 20, constraints = c()),
+  parameter_name = list(type = "string", minValue = 2, maxValue = 74, constraints = c()),
+  pvalue = list(type = "float", minValue = 0, maxValue = 1, constraints = c())
+)
+
+#############################################################################################################################################################################################################
+
+##ANALYSIS ID + GENE_ACCESSION_ID + GENE_SYMBOL + PAPRAMETER_ID + PARAMETER_NAME + P_VALUE ## - NORMALISATION CHECKER FUNCTION
+
+cvd <- function(x, sop) {
+  res = integer(0)
+  # set res to o + function is x (input), sop - sop value name
+  
+  if (sop$type == "string")
+  {
+    res = which(nchar(x) < sop$minValue | nchar(x) > sop$maxValue)
+    #return those of which character length is outside the given range from sop
+    
+    if (length(sop$constraints)>0)
+      # if the sop dataframe value for constrains is not NULL (which all are except 2) then go ahead
+      res = union(res, which(!(x %in% sop$constraints)))
+    #return those of which are NOT in the sop constraints list
+  }
+  else if (sop$type == "float")
+    #else for the pvalue (float) if it is outside given range 0-1 then return the row value.
+    res <- which(as.numeric(x) < sop$minValue | as.numeric(x) > sop$maxValue)
+  return(res)
+}
+
+```
+
+
+## analysis_id SOP normalisation check ##
+
+```{r}
+#RESULTS OF NORMALISATION CHECKER# - ENSURES THAT ALL SOP CONSTRAINTS ARE MET
+
+anal_cvd <- cvd(merged_df$analysis_id , sop$analysis_id)#returned integer = 0 - meaning that NO analysis_id exceeded the number of characters (nchar)
+merged_df$analysis_id <- as.character(merged_df$analysis_id)
+
+```
+
+
+##gene_accession_id SOP normalisation check ##
+
+
+```{r}
+#Gene accession cvd
+#FIX GENE_ACCESSION_ID SOP NORMALISATION## = remove these values and replace with NA:
+#error values: "mouse_strain"      "mouse_life_stage"  "parameter_id"      "pvalue"            "parameter_name"    "Gene_accession_id" "Mouse_strain"      "Mouse_life_stage"  "Parameter_id"      "Parameter_name"    "Pvalue" 
+
+bad_values <- c("mouse_strain", "mouse_life_stage", "parameter_id", "pvalue",
+                "parameter_name", "Gene_accession_id", "Mouse_strain",
+                "Mouse_life_stage", "Parameter_id", "Parameter_name", "Pvalue")
+
+# replace only those with NA
+merged_df$gene_accession_id[merged_df$gene_accession_id %in% bad_values] <- NA
+unique(merged_df$gene_accession_id)
+
+gene_acc_cvd <- cvd(merged_df$gene_accession_id, sop$gene_accession_id)
+merged_df$gene_accession_id[gene_acc_cvd] 
+merged_df$gene_accession_id <- str_trim(merged_df$gene_accession_id) # this ensures the values are uniform and similar to the dis_inf - MGI_ID
+merged_df$gene_accession_id <- toupper(merged_df$gene_accession_id) # same for the formatting of this column
+merged_df$gene_accession_id <- gsub("MGI:", "", merged_df$gene_accession_id)
+
+
+
+```
+
+
+## gene symbol SOP normalisation check##
+
+```{r}
+#gene symbol csv#
+
+gene_symb_csv <- cvd(merged_df$gene_symbol, sop$gene_symbol)
+#no error#
+```
+
+
+##MOUSE STRAIN SOP Normalisation check##
+
+
+
+```{r}
+##THIS ONE NEEDS TO BE DISCUSSED!! 
+
+strain_cvd <- cvd(merged_df$mouse_strain, sop$mouse_strain)
+merged_df$mouse_strain[strain_cvd]
+# they are a mix of NA and GENES WHICH ARE NOT ENTAILED ON THE SOP GIVEN LIST
+unique(merged_df$mouse_strain)
+merged_df$mouse_strain <- toupper(merged_df$mouse_strain) # convert the strains to upper case for consistency 
+# here the genes which aren't not enailed in the SOP given list are seen, this could be error BUT HOW COME OTHER GENES FROM SOP LIST AREN'T SEEN??
+```
+
+
+
+##mouse life stage SOP Normalisation check##
+
+```{r}
+stage_cvd <- cvd(merged_df$mouse_life_stage , sop$mouse_life_stage)
+merged_df$mouse_life_stage[stage_cvd]
+#Convert everything to lowercase 
+merged_df$mouse_life_stage <- str_to_lower(merged_df$mouse_life_stage)
+
+#Replace any string "na" with actual NA 
+merged_df$mouse_life_stage[merged_df$mouse_life_stage == "na"] <- NA
+
+#Map to SOP-approved values
+merged_df$mouse_life_stage <- recode(
+  merged_df$mouse_life_stage,
+  "early adult" = "Early adult",
+  "middle aged adult" = "Middle aged adult",
+  "late adult" = "Late adult",
+  "e12.5" = "E12.5",
+  "e15.5" = "E15.5",
+  "e18.5" = "E18.5",
+  "e9.5" = "E9.5"
+)
+
+#Check result
+unique(merged_df$mouse_life_stage)
+
+```
+
+
+##parameter_id and parameter_name SOP NORMALISATION##
+
+
+```{r}
+#no errors#
+
+param_cvd <-cvd(merged_df$parameter_id , sop$parameter_id)
+par_name_cvd <- cvd(merged_df$parameter_name , sop$parameter_name)
+# NO ERRORS
+```
+
+
+##PVALUE SOP NORMALISATION##
+
+
+```{r}
+# Error comes from some values exceeding the given range for P VALUE
+pval_cvd <- cvd(merged_df$pvalue, sop$pvalue)
+merged_df$pvalue[pval_cvd]
+
+#FIX#
+##PVALUE  SOP NORMALISATION##
+## The p values which are erroneous are LOG TRANSFORMATIONS OF PREVIOUS P VALUES:
+
+# Ensure pvalue column is numeric
+merged_df$pvalue <- as.numeric(merged_df$pvalue)
+
+# Create logical vectors for different cases
+neg_values_idx <- merged_df$pvalue < 0 # suspicious negative values + probably wrong
+log_p_idx <- merged_df$pvalue > 1
+log_p_idx <- log_p_idx & !is.na(log_p_idx)# likely -log10(p) values so ignore the NA values
+
+merged_df$pvalue[log_p_idx] <- NA
+merged_df$pvalue[log_p_idx] <- NA
+
+
+# Convert -log10(p) values back to raw p 
+#merged_df$pvalue[log_p_idx] <- 10^(-merged_df$pvalue[log_p_idx])
+
+#neg_values_idx <- neg_values_idx & !is.na(neg_values_idx) # likeyly with negative values so ignore the NA values
+
+# Now safely check if there are any negatives
+#if (any(neg_values_idx)) {
+ # warning("Negative p-values detected; please inspect these rows.")
+  #merged_df$pvalue[neg_values_idx] <- NA
+#}
+
+# Check results
+#summary(merged_df$pvalue)
+
+# Ensure all values are between 0 and 1
+merged_df$pvalue <- pmin(pmax(merged_df$pvalue, 0), 1)
+
+range(merged_df$pvalue, na.rm = TRUE)
+
+
+# this is done becuase some p values are negative, they can tbe pvalues since they are never negative, and they cant be log transformed, since 
+
+
+```
+
+
+##FINAL SOP STANDARDISATION CHECK##
+
+```{r}
+#ENSURE THAT MOST COLUMNS (OTHER THAN P VALUE) ARE CLASSED AS CHARACTER:
+col_strings_ty<- merged_df[,1:6]
+for (headline in col_strings_ty){
+  as.character(merged_df$headline)
+}
+
+#ENSURES P VALUE IS CLASSED AS DOUBLE (FLOAT)
+options(scipen=888)
+merged_df$pvalue <- as.double(merged_df$pvalue)
+
+summary(merged_df$pvalue)
+
+#FINAL CHECK TO SEE IF SOP NORMALISATION SUCCEEDED#
+anal_cvd <- cvd(merged_df$analysis_id , sop$analysis_id)
+print(anal_cvd)
+gene_acc_cvd <- cvd(merged_df$gene_accession_id, sop$gene_accession_id)
+print(gene_acc_cvd)
+gene_symb_csv <- cvd(merged_df$gene_symbol, sop$gene_symbol)
+print(gene_symb_csv)
+strain_cvd <- cvd(merged_df$mouse_strain, sop$mouse_strain)
+print(strain_cvd)
+stage_cvd <- cvd(merged_df$mouse_life_stage , sop$mouse_life_stage)
+print(stage_cvd) # ALL RETURNED HERE ARE NA, since they are not detailed in the SOP as an option
+
+param_cvd <-cvd(merged_df$parameter_id , sop$parameter_id)
+print(param_cvd)
+par_name_cvd <- cvd(merged_df$parameter_name , sop$parameter_name)
+print(par_name_cvd)
+pval_cvd <- cvd(merged_df$pvalue, sop$pvalue)
+print(pval_cvd)
+
+```
+
+
+
+** FIND THE NA's and DUPLICATES OF ALL ROWS + plot NA's**
+1. flag all duplicates
+2. SOP - Datatype conversion
+3. Find NA's in columns of data 
+4. plot NA
+
+```{r}
+library(ggplot2)
+
+
+if (any(duplicated(merged_df))) { # marks the rows which appear more than once
+  
+  duplicate_rows <- merged_df[duplicated(merged_df) | duplicated(merged_df, fromLast = TRUE), ]
+  # finds duplicates scanning top down (this only flags second value), then pipes this into the next part and scans bottom up to flag the 'second duplicate' (the ignored first one)
+  duplicate_rows
+}
+count(duplicate_rows)
+
+view(merged_df)
+
+na_counts <- lapply(merged_df, function(x) sum(is.na(x)))
+print(na_counts)
+
+ggplot(na_df, aes(reorder(column, -na_count), y = na_count))+
+  geom_histogram(stat = 'summary')
+
+```
+
+
+** Disease information.CSV - CLEANING **
+
+1. Ensure that column order is specified 
+2. remove multiple OMIM's from one row into seperate rows 
+
+
+```{r}
+library(tidyr)
+library(dplyr)
+
+dis_inf <- read.csv("../group5/Disease_information.csv", header = TRUE, sep =",", stringsAsFactors = FALSE)
+
+#lower case headers
+dis_inf <- dis_inf %>%
+  rename(
+    do_disease_id = "DO.Disease.ID",
+    do_disease_name = "DO.Disease.Name",
+    omim_id = "OMIM.IDs",
+    mouse_mgi_id = "Mouse.MGI.ID."
+  ) %>%
+  
+  #rename those with underscores instead of rows
+  
+  separate_rows(omim_id, sep="\\|")
+  #seperate OMIM_ID columns = multiple ID's seen in same rows
+
+#below - remove the OMIM and DOID words before the numerical value since they are common in all rows
+dis_inf$omim_id <- gsub("OMIM:", "", dis_inf$omim_id)
+dis_inf$do_disease_id <- gsub("DOID:", "", dis_inf$do_disease_id)
+dis_inf$mouse_mgi_id <- str_trim(dis_inf$mouse_mgi_id) # ensures that the data MGI mateches with gene accession ID from merged_df
+dis_inf$mouse_mgi_id <- toupper(dis_inf$mouse_mgi_id) # ensures that data is upper case to match gene accession ID
+dis_inf$mouse_mgi_id <- gsub("MGI:", "", dis_inf$mouse_mgi_id)
+
+#re-order to the column names so that MGI ID is at the beginning - easier for SQL team
+colnames(dis_inf)<- c("mouse_mgi_id", "do_disease_id", "do_disease_name", "omim_id")
+
+for (z in colnames(dis_inf)){
+  if (!z %in% colnames(dis_inf)){
+      dis_inf[[z]] <- NA
+  }
+}
+
+#count number of NA's + ensure there are none
+count_dis_inf_na <- lapply(dis_inf, function(x) sum(is.na(x)))
+print(count_dis_inf_na)
+# NO NA's
+
+view(merged_df)
+view(dis_inf)
+
+
+```

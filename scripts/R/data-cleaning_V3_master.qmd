@@ -1,0 +1,587 @@
+---
+title: "data_cleaning_v3"
+author: "group 5" 
+date: "12/11/2025
+format: html
+---
+#Data cleaning of IMPC data
+
+##Imports & setting for data cleaning
+
+1. **Set the current directory and locate the directory containing all CSV files.**  
+2. **Define the column name order of the master CSV file.**  
+3. **Create an empty `dfs` list to store all the data.**  
+4. **Iterate through all CSV files using a `for` loop:**  
+   1. Read the CSV file — ensure `header = FALSE` (for later column naming).  
+   2. Transpose the data — columns become rows (cases), rows become columns (categories).  
+      - Ensure it is done with `as.data.frame`.  
+   3. Assign new column names — use the first row after transposition.  
+   4. Remove the original header row of the data frame (it will be `V1, V2, V3, ...` because `header = FALSE`) — remove it.  
+   5. Check whether the columns follow the same order and whether any data values are missing in the CSV file:  
+      - Create a variable `col` and iterate through `col_names` (the list of column titles made earlier).  
+      - If `col != col_name` or is empty, replace with `NA`.  
+        - Use `df_t[[col]]` (square brackets) to create/modify the column.  
+   6. Reorder and match the column order of `df_t` to `col_order`.  
+   7. Append the CSV (`df_t` from the current loop iteration) to `dfs` and increment the list length for the next iteration.  
+5. **Bind all rows (cases) of the list into a single data frame (longer result).**  
+6. **Ensure MGI and mouse strain are uppercase.**
+
+
+```{r}
+#Data cleaning of IMPC pipeline
+#Objetive: process all the IMPC files into a single df, fix headers, transpose, fix col. order, verify using SOP
+#Input: IMPC csv files (~30k)
+#Output: Merged df
+
+#packages importation
+library(tidyverse) #tidyverse has a collection of packages as ggplot2, tidyr, dplyr, etc.
+                  #these packages are essential to process the data in this project 
+
+
+set.seed(88880888) #setting of seed for random selection.
+
+#====Working_data(10% of data)==========================
+
+#Generate random sample of 10% of data (~29k files) to work with - for initial stages of analysis.
+#A random subset from all the data was selected as a working_data to ease the work, and not need to work...
+#... with all the data at once. Which was beneficial because we manage to scale the script from a small batch to a the big one.
+working_data <- sample(all_data, 300, replace = FALSE, prob = NULL)
+
+
+
+#====Path and structure================================
+
+# locate directory with all IMPC CSV.
+# Remember to change path to your own.
+all_data<- list.files(pattern = '*.csv',path = "../group5/data/", full.names = TRUE)
+# stores all IMPC CSV path inside a list
+
+# Defining order of columns
+col_order <- c("gene_accession_id","analysis_id", "gene_symbol", "mouse_strain", "mouse_life_stage", "parameter_id", "parameter_name" , "pvalue")
+
+
+#====Iterate CSV content into a single df =====================
+
+dfs <- list() #make an empty list for the loop
+
+for (path in all_data){ # for each file in the data
+
+  df <- read.csv(path, header = FALSE, stringsAsFactors = FALSE)
+  #header = FALSE: V1,V2,V3,V4 are the HEADERS 
+  # r reads the files - after transposing - as FIRST ROW OF DATA = later becoming the column names
+  
+  
+  df_t <- as.data.frame(t(df), stringsAsFactors = FALSE) #Transpose the file data as a dataframe into dfs. Because                                                           the IMPC data CSV had the cases in columns instead of                                                             rows
+  colnames(df_t) <- df_t[1,]   #ASSIGNING COLUMN NAMES - as  first row after transposition
+  df_t <- df_t[-1, ]          #Removing the original header row
+  .. HEREEEEE
+  for (col in col_order){ # create variable called col so that it can iterate through col_order of files
+    if (!col %in% colnames(df_t)){
+      df_t[[col]] <- NA # ensure all csv files have same columns by adding missing ones NA, so that they can be merged row-wise
+
+      #col - already represented as one of the col_order variables which IF THEY ARE NOT one of the colnames in df_t, then create an NA group for it in that area
+    }
+  }
+
+  
+  df_t <- df_t[,col_order] #re-order and match the columns in the same order as col_order
+  #add row to list
+  dfs[[length(dfs) + 1]] <- df_t
+  # puts the df_t csv file (from this current for loop iteration) into the dfs list
+  # stores the WHOLE DATAFRAME as one item in the list
+}
+  
+
+merged_df <- bind_rows(dfs) # binds rows
+
+# Write output to new CSV
+write.csv(merged_df, "merged_transposed.csv", row.names = FALSE)
+merged_df <- as.data.frame(merged_df)
+
+##################find all NA values######################################
+na_counts <- lapply(merged_df, function(x) sum(is.na(x)))
+print(na_counts)
+
+na_df <- data.frame(column = names(na_counts),
+                    na_count =  as.numeric(na_counts)
+)
+
+#loop helps to find inconsistancies - sometimes lower/upper case changes in mouse_life_stage or mouse_Strain# and for finding NA's in these categories
+names <- c("mouse_strain", "mouse_life_stage")
+for (x in names){
+  print(unique(merged_df[[x]]))
+}
+
+
+colnames(merged_df) <- tolower(colnames(merged_df))
+#Ensure all column headers are lowercaseu
+merged_df_copy <- merged_df
+
+
+```
+
+
+## SOP Normalization** ALL TESTED ON SAMPLE DATASET FIRST
+
+1. Generate SOP database to run checks against
+2. generate function which checks string vs float (according to SOP) + authorise based on number of characters/constraints required 
+3. ensure consistant datatype, min max character count, constraints.
+
+```{r}
+library(tidyverse)
+library(tidyr)
+library(stringr)
+
+
+#create dataframe called sop + have parameters of IMPC_SOP in dataframe#
+sop <- list(
+  analysis_id = list(type = "string", minValue = 15, maxValue = 15, constraints = c()),
+  gene_accession_id = list(type = "string", minValue = 9, maxValue = 11, constraints = c()),
+  gene_symbol = list(type = "string", minValue = 1, maxValue = 13, constraints = c()),
+  mouse_strain = list(type = "string", minValue = 3, maxValue = 5, constraints = c("C57BL", "B6J", "C3H", "129SV")),
+  mouse_life_stage = list(type = "string", minValue = 4, maxValue = 17, constraints = c("E12.5", "E15.5", "E18.5", "E9.5", "Early adult", "Late adult", "Middle aged adult")),
+  parameter_id = list(type = "string", minValue = 15, maxValue = 20, constraints = c()),
+  parameter_name = list(type = "string", minValue = 2, maxValue = 74, constraints = c()),
+  pvalue = list(type = "float", minValue = 0, maxValue = 1, constraints = c())
+)
+
+
+##ANALYSIS ID + GENE_ACCESSION_ID + GENE_SYMBOL + PAPRAMETER_ID + PARAMETER_NAME + P_VALUE ## - NORMALISATION CHECKER FUNCTION
+
+cvd <- function(x, sop) {
+  res = integer(0)
+  # set res to o + function is x (input), sop - sop value name
+  
+  if (sop$type == "string")
+  {
+    res = which(nchar(x) < sop$minValue | nchar(x) > sop$maxValue)
+    #return those of which character length is outside the given range from sop
+    
+    if (length(sop$constraints)>0)
+      # if the sop dataframe value for constrains is not NULL (which all are except 2) then go ahead
+      res = union(res, which(!(x %in% sop$constraints)))
+    #return those of which are NOT in the sop constraints list
+  }
+  else if (sop$type == "float")
+    #else for the pvalue (float) if it is outside given range 0-1 then return the row value.
+    res <- which(as.numeric(x) < sop$minValue | as.numeric(x) > sop$maxValue)
+  return(res)
+}
+
+```
+
+
+## analysis_id SOP normalisation check ##
+
+```{r}
+#RESULTS OF NORMALISATION CHECKER# - ENSURES THAT ALL SOP CONSTRAINTS ARE MET
+
+anal_cvd <- cvd(merged_df$analysis_id , sop$analysis_id)#returned integer = 0 - meaning that NO analysis_id exceeded the number of characters (nchar)
+merged_df$analysis_id <- as.character(merged_df$analysis_id)
+
+```
+
+
+##gene_accession_id SOP normalisation check ##
+
+
+```{r}
+#Gene accession cvd
+#FIX GENE_ACCESSION_ID SOP NORMALISATION## = remove these values and replace with NA:
+#error values: "mouse_strain"      "mouse_life_stage"  "parameter_id"      "pvalue"            "parameter_name"    "Gene_accession_id" "Mouse_strain"      "Mouse_life_stage"  "Parameter_id"      "Parameter_name"    "Pvalue" 
+
+as.numeric(merged_df$gene_accession_id) # ensure column is numeric in datatype
+
+tolower(merged_df$gene_accession_id)
+bad_values <- c("mouse_strain", "mouse_life_stage", "parameter_id", "pvalue",
+                "parameter_name", "Gene_accession_id", "Mouse_strain",
+                "Mouse_life_stage", "Parameter_id", "Parameter_name", "Pvalue")
+
+# replace bad_values with NA
+merged_df$gene_accession_id[merged_df$gene_accession_id %in% bad_values] <- NA
+unique(merged_df$gene_accession_id)
+
+#CVD function test
+gene_acc_cvd <- cvd(merged_df$gene_accession_id, sop$gene_accession_id)
+merged_df$gene_accession_id[gene_acc_cvd]
+
+merged_df$gene_accession_id <- str_trim(merged_df$gene_accession_id) # this ensures the values are uniform and similar to the dis_inf - MGI_ID
+merged_df$gene_accession_id <- toupper(merged_df$gene_accession_id) # upper case
+merged_df$gene_accession_id <- gsub("MGI:", "", merged_df$gene_accession_id)
+
+view(merged_df)
+```
+
+
+## gene symbol SOP normalisation check##
+
+```{r}
+#gene symbol csv#
+
+gene_symb_csv <- cvd(merged_df$gene_symbol, sop$gene_symbol)
+#no error#
+```
+
+
+##MOUSE STRAIN SOP Normalisation check##
+
+
+
+```{r}
+##THIS ONE NEEDS TO BE DISCUSSED!!!
+strain_cvd <- cvd(merged_df$mouse_strain, sop$mouse_strain)
+merged_df$mouse_strain[strain_cvd]
+
+# they are a mix of NA and GENES WHICH ARE NOT ENTAILED ON THE SOP GIVEN LIST
+unique(merged_df$mouse_strain)
+merged_df$mouse_strain <- toupper(merged_df$mouse_strain) # convert the strains to upper case for consistency 
+
+```
+
+
+
+##mouse life stage SOP Normalisation check##
+
+```{r}
+stage_cvd <- cvd(merged_df$mouse_life_stage , sop$mouse_life_stage)
+merged_df$mouse_life_stage[stage_cvd]
+
+#Convert everything to lowercase 
+merged_df$mouse_life_stage <- str_to_lower(merged_df$mouse_life_stage)
+
+#Replace any string "na" with actual NA 
+merged_df$mouse_life_stage[merged_df$mouse_life_stage == "na"] <- NA
+
+#Map to SOP-approved values
+merged_df$mouse_life_stage <- recode(
+  merged_df$mouse_life_stage,
+  "early adult" = "Early adult",
+  "middle aged adult" = "Middle aged adult",
+  "late adult" = "Late adult",
+  "e12.5" = "E12.5",
+  "e15.5" = "E15.5",
+  "e18.5" = "E18.5",
+  "e9.5" = "E9.5"
+)
+
+#Check result
+unique(merged_df$mouse_life_stage)
+
+```
+
+
+##parameter_id and parameter_name SOP NORMALISATION##
+
+
+```{r}
+#no errors#
+
+param_cvd <-cvd(merged_df$parameter_id , sop$parameter_id)
+par_name_cvd <- cvd(merged_df$parameter_name , sop$parameter_name)
+# ensure parameter_name - is lowercase:
+merged_df$parameter_name <- tolower(merged_df$parameter_name)
+# NO ERRORS
+```
+
+
+##PVALUE SOP NORMALISATION##
+
+
+```{r}
+#ensure values are numeric
+# Ensure pvalues are numeric
+merged_df$pvalue <- as.numeric(merged_df$pvalue)
+
+# Clamp values to [0,1] first
+merged_df$pvalue <- pmin(pmax(merged_df$pvalue, 0), 1)
+
+# Check which rows are out-of-range according to SOP
+pval_cvd <- cvd(merged_df$pvalue, sop$pvalue)
+
+# Replace bad p-values with NA
+merged_df$pvalue[pval_cvd] <- NA
+
+# Check remaining range safely
+if (any(!is.na(merged_df$pvalue))) {
+  range_vals <- range(merged_df$pvalue, na.rm = TRUE)
+  print(range_vals)
+} else {
+  message("All p-values are NA after cleaning.")
+}
+
+
+```
+
+
+##FINAL SOP STANDARDISATION CHECK##
+
+```{r}
+#ENSURE THAT MOST COLUMNS (OTHER THAN P VALUE) ARE CLASSED AS CHARACTER:
+col_strings_ty<- merged_df[,1:6]
+for (headline in col_strings_ty){
+  as.character(merged_df$headline)
+}
+
+#ENSURES P VALUE IS CLASSED AS DOUBLE (FLOAT)
+options(scipen=888)
+merged_df$pvalue <- as.double(merged_df$pvalue)
+
+
+#FINAL CHECK TO SEE IF SOP NORMALISATION SUCCEEDED#
+anal_cvd <- cvd(merged_df$analysis_id , sop$analysis_id)
+print(anal_cvd)
+gene_acc_cvd <- cvd(merged_df$gene_accession_id, sop$gene_accession_id)
+print(gene_acc_cvd)
+gene_symb_csv <- cvd(merged_df$gene_symbol, sop$gene_symbol)
+print(gene_symb_csv)
+strain_cvd <- cvd(merged_df$mouse_strain, sop$mouse_strain)
+print(strain_cvd)
+stage_cvd <- cvd(merged_df$mouse_life_stage , sop$mouse_life_stage)
+print(stage_cvd) # ALL RETURNED HERE ARE NA, since they are not detailed in the SOP as an option
+
+param_cvd <-cvd(merged_df$parameter_id , sop$parameter_id)
+print(param_cvd)
+par_name_cvd <- cvd(merged_df$parameter_name , sop$parameter_name)
+print(par_name_cvd)
+pval_cvd <- cvd(merged_df$pvalue, sop$pvalue)
+print(pval_cvd)
+
+```
+
+
+
+** FIND THE NA's and DUPLICATES OF ALL ROWS + plot NA's**
+1. flag all duplicates
+2. SOP - Datatype conversion
+3. Find NA's in columns of data 
+4. plot NA
+
+```{r}
+library(ggplot2)
+if (any(duplicated(merged_df))) { # marks the rows which appear more than once
+  duplicate_rows <- merged_df[duplicated(merged_df) | duplicated(merged_df, fromLast = TRUE), ]
+  # finds duplicates scanning top down (this only flags second value), then pipes this into the next part and scans bottom up to flag the 'second duplicate' (the ignored first one)
+  print(duplicate_rows)
+}
+#all duplicates have NO analysis_id therefore they can not be traced in later analysis so remove from merged_df 
+merged_df <- subset(merged_df, !is.na(analysis_id))
+
+
+na_counts <- lapply(merged_df, function(x) sum(is.na(x)))
+print(na_counts)
+
+ggplot(na_df, aes(reorder(column, -na_count), y = na_count))+
+  geom_histogram(stat = 'summary')
+
+```
+
+
+** Disease information.CSV - CLEANING **
+
+1. Ensure that column order is specified 
+2. remove multiple OMIM's from one row into seperate rows 
+
+
+```{r}
+library(tidyr)
+library(dplyr)
+
+dis_inf <- read.csv("../group5/Disease_information.csv", header = TRUE, sep =",", stringsAsFactors = FALSE)
+
+column_names<- c("do_disease_id", "do_disease_name", "omim_id", "mouse_mgi_id")
+
+dis_inf <- dis_inf %>%
+  rename_with(~ column_names, .cols = everything()[1:4]) %>% # function rename_with() 
+  # ~ = function(x) abbreviation on column names, 
+  separate_rows(omim_id, sep = "\\|") #separate OMIM_ID columns = multiple ID's seen in same rows
+
+#below - remove the OMIM and DOID words before the numerical value since they are common in all rows
+dis_inf$omim_id <- gsub("OMIM:", "", dis_inf$omim_id)
+dis_inf$do_disease_id <- gsub("DOID:", "", dis_inf$do_disease_id)
+dis_inf$mouse_mgi_id <- str_trim(dis_inf$mouse_mgi_id) # ensures that the data MGI mateches with gene accession ID from merged_df
+dis_inf$mouse_mgi_id <- toupper(dis_inf$mouse_mgi_id) # ensures that data is upper case to match gene accession ID
+dis_inf$mouse_mgi_id <- gsub("MGI:", "", dis_inf$mouse_mgi_id)
+
+#re-order to the column names so that MGI ID is at the beginning - easier for SQL team
+colnames(dis_inf)<- c("mouse_mgi_id", "do_disease_id", "do_disease_name", "omim_id")
+
+for (z in colnames(dis_inf)){
+  if (!z %in% colnames(dis_inf)){
+      dis_inf[[z]] <- NA
+  }
+}
+
+#count number of NA's + ensure there are none
+count_dis_inf_na <- lapply(dis_inf, function(x) sum(is.na(x)))
+print(count_dis_inf_na)
+# NO NA's
+
+```
+
+
+## IMPC_PROCEDURE_CLEAN.qmd ##
+
+```{r}
+procedure <- read.csv("../group5/impc_procedure.csv", header = TRUE, sep = ";")
+view(procedure)
+unique(procedure$impcParameterOrigId)
+colnames(procedure)
+#check duplicates
+micky <-duplicated(procedure$impcParameterOrigId)
+counter = 0
+for (x in micky){
+  if (x == TRUE){
+    counter <- counter + 1 
+  }
+}
+#print(counter)
+
+
+#convert all character columns to lower case
+procedure$description <- tolower(procedure$description)
+
+#checker - for empty cells
+any(trimws(as.character(procedure$description == " ")))
+#replacer [w/ NA]
+procedure$description[procedure$description== " "] <- NA
+colnames(procedure) <- c("name", "description", "ismandatory","impc_parameter_orig_id")
+
+#procedure <- procedure[, c("name", "description", "ismandatory", "impc_parameter_orig_id")]
+
+colnames(procedure) <- tolower(colnames(procedure))
+
+
+view(procedure)
+
+#procedure[81,2] 
+#head(procedure)
+```
+
+## IMPC_parameter_description_clean.qmd ##
+
+```{r}
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+
+# locate IMPC_Parameter description file 
+ipd_csv<- read.csv("../group5/IMPC_parameter_description.txt", header = TRUE)
+
+colnames(ipd_csv)<- tolower(colnames(ipd_csv))
+
+
+tolower(ipd_csv)
+#head(ipd_csv) # used to check the whether lower case change worked
+
+
+## checking if all columns have correct data type and length, print rows that don't##
+check_param_origin_id <- !as.integer(ipd_csv$impcparameterorigid)
+if (any(check_param_origin_id)){
+  print(check_param_origin_id)
+}
+
+non_strings_name <- ipd_csv[grepl("\\d+", ipd_csv$name), ] # keeps only rows where 'name' contains at least one digit
+
+## check name is all character string and lower case & only has numbers that are necessary
+ipd_csv$name<- tolower(ipd_csv$name)
+print(non_strings_name)
+
+#checking for any NA values in names column 
+check_for_na_name <- is.na(ipd_csv$name)
+if (any(check_for_na_name)){
+  print(check_for_na_name)
+}
+
+ipd_csv$description <- trimws(ipd_csv$description) # remove leading/trailing whitespace
+ipd_csv$description[ipd_csv$description == ""] <- NA # replace empty cells with NA
+ipd_csv$description <- gsub("_", " ", ipd_csv$description) # replace all underscores with spaces
+
+head(ipd_csv[13:15, ])
+
+# Rename columns
+colnames(ipd_csv) <- c("impc_parameter_orig_id", "name", "description", "parameter_id")
+
+# Reorder columns
+ipd_csv <- ipd_csv[, c("parameter_id", "impc_parameter_orig_id", "name", "description")]
+
+
+
+view(ipd_csv)
+```
+
+## SQL foreign and primary keys + SEARCHES ##
+
+```{r}
+view(ipd_csv)
+view(merged_df)
+view(procedure)
+view(dis_inf)
+
+#created a copy of dis_inf so no changes were made to original
+copy_dis_inf <- dis_inf
+colnames(copy_dis_inf) <- c("gene_accession_id", "do_disease_id", "do_disease_name", "omim_id")#clarify column names
+
+#THIS IS IMPORTANT! : inner_join() works with COMMON NAMES OF COLUMNS (rename mouse_mgi_id to gene_accession_id)
+
+mdf_di <- inner_join(merged_df, copy_dis_inf, by = "gene_accession_id")
+#run merged_df(mdf) and dis_inf (di) = mdf_di 
+
+
+#IPD_CSV + PROCEDURE - PARAMETER_ORIGIN_ID LINK
+  # 1. Normalise - ensure all IDs have same format across tables 
+
+ipd_csv$impc_parameter_orig_id <- trimws(tolower(as.character(ipd_csv$impc_parameter_orig_id)))
+ipd_csv$impc_parameter_orig_id <- as.character(ipd_csv$impc_parameter_orig_id) #ensures parameter_orig_id is character so that link is made 
+
+procedure$impc_parameter_orig_id <- trimws(tolower(as.character(procedure$impc_parameter_orig_id)))
+procedure$impc_parameter_orig_id <- as.character(procedure$impc_parameter_orig_id) #ensures parameter_orig_id is character so that link is made
+
+#two above variables - ensure that two columns are similar + normalised
+ipd_procedure <- inner_join(ipd_csv, procedure, by = "impc_parameter_orig_id", relationship = "many-to-many")
+nrow(ipd_procedure) #check if there are any overlaps
+
+
+
+# IPD_CSV AND MERGED_DF = PARAMETER_ID LINK 
+
+  #1. Normalise the columns in both dataframes
+ipd_csv$parameter_id <- trimws(ipd_csv$parameter_id) # trim extra space
+merged_df$parameter_id <- trimws(merged_df$parameter_id) # trim extra spaces
+
+
+merged_df$parameter_id <- toupper(merged_df$parameter_id) # upper case for numerical 
+ipd_csv$parameter_id <- toupper(ipd_csv$parameter_id) # uppercase for numericals 
+
+##ipd_csv(ipd) + merged_df(mdf) = ipd_mdf
+ipd_mdf <- inner_join(ipd_csv, merged_df, by = "parameter_id", relationship = "many-to-many")
+nrow(ipd_mdf) # check if there are any overlaps
+
+
+```
+
+#Saving and exporting dataframes as csv files #
+
+```{r}
+#for merged_df - remove all the V.. at the beginning as row names, not needed
+rownames(merged_df) <- NULL
+
+#get current working directory to know where to save the csv files to:
+getwd()
+
+#save merged_df as csv for export:
+write.csv(merged_df, "../csv_data_files/merged_df.csv", row.names = FALSE)
+
+#save procedure as csv for export
+write.csv(procedure, "../csv_data_files/procedure.csv", row.names = FALSE)
+
+#save ipd_csv as csv for export
+write.csv(ipd_csv, "../csv_data_files/ipd.csv", row.names = FALSE)
+
+#save dis_inf as csv for export
+write.csv(dis_inf, "../csv_data_files/dis_inf.csv", row.names = FALSE)
+
+
+```
+
+
+
