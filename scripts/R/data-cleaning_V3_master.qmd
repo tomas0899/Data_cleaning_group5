@@ -28,10 +28,10 @@ format: html
 
 
 ```{r}
-#Data cleaning of IMPC pipeline
-#Objetive: process all the IMPC files into a single df, fix headers, transpose, fix col. order, verify using SOP
-#Input: IMPC csv files (~30k)
-#Output: Merged df
+# Data cleaning of IMPC pipeline
+# Objetive: process all the IMPC files into a single df, fix headers, transpose, fix col. order, verify using SOP
+# Input: IMPC csv files (~30k)
+# Output: Merged df
 
 #packages importation
 library(tidyverse) #tidyverse has a collection of packages as ggplot2, tidyr, dplyr, etc.
@@ -45,8 +45,9 @@ set.seed(88880888) #setting of seed for random selection.
 #Generate random sample of 10% of data (~29k files) to work with - for initial stages of analysis.
 #A random subset from all the data was selected as a working_data to ease the work, and not need to work...
 #... with all the data at once. Which was beneficial because we manage to scale the script from a small batch to a the big one.
-working_data <- sample(all_data, 300, replace = FALSE, prob = NULL)
 
+#working_data <- sample(all_data, 300, replace = FALSE, prob = NULL)
+#early-stage sampling command, saved
 
 
 #====Path and structure================================
@@ -74,31 +75,28 @@ for (path in all_data){ # for each file in the data
   df_t <- as.data.frame(t(df), stringsAsFactors = FALSE) #Transpose the file data as a dataframe into dfs. Because                                                           the IMPC data CSV had the cases in columns instead of                                                             rows
   colnames(df_t) <- df_t[1,]   #ASSIGNING COLUMN NAMES - as  first row after transposition
   df_t <- df_t[-1, ]          #Removing the original header row
-  .. HEREEEEE
-  for (col in col_order){ # create variable called col so that it can iterate through col_order of files
+  
+  for (col in col_order){ # create variable called col so that it can iterate                               through col_order of files
     if (!col %in% colnames(df_t)){
-      df_t[[col]] <- NA # ensure all csv files have same columns by adding missing ones NA, so that they can be merged row-wise
-
+      df_t[[col]] <- NA # ensure all csv files have same columns by adding                              missing ones NA, so that they can be merged row-wise
+                        # ensure that all columns exists
       #col - already represented as one of the col_order variables which IF THEY ARE NOT one of the colnames in df_t, then create an NA group for it in that area
     }
   }
 
   
-  df_t <- df_t[,col_order] #re-order and match the columns in the same order as col_order
+  df_t <- df_t[,col_order] #re-order and match the columns in the same order                              as col_order
   #add row to list
   dfs[[length(dfs) + 1]] <- df_t
   # puts the df_t csv file (from this current for loop iteration) into the dfs list
   # stores the WHOLE DATAFRAME as one item in the list
 }
   
-
+#====Merged all files ============================================
 merged_df <- bind_rows(dfs) # binds rows
 
-# Write output to new CSV
-write.csv(merged_df, "merged_transposed.csv", row.names = FALSE)
-merged_df <- as.data.frame(merged_df)
 
-##################find all NA values######################################
+#====Quick NA finder=============================================
 na_counts <- lapply(merged_df, function(x) sum(is.na(x)))
 print(na_counts)
 
@@ -106,17 +104,21 @@ na_df <- data.frame(column = names(na_counts),
                     na_count =  as.numeric(na_counts)
 )
 
-#loop helps to find inconsistancies - sometimes lower/upper case changes in mouse_life_stage or mouse_Strain# and for finding NA's in these categories
+#loop helps to find inconsistancies - sometimes lower/upper case changes in mouse_life_stage or mouse_Strain
+# and for finding NA's in these categories
 names <- c("mouse_strain", "mouse_life_stage")
 for (x in names){
   print(unique(merged_df[[x]]))
 }
 
+#standarize header casing
+colnames(merged_df) <- tolower(colnames(merged_df))#Ensure all column headers are lowercase
 
-colnames(merged_df) <- tolower(colnames(merged_df))
-#Ensure all column headers are lowercaseu
-merged_df_copy <- merged_df
 
+
+#====Write output to new CSV=========================
+write.csv(merged_df, "merged_transposed.csv", row.names = FALSE)
+merged_df <- as.data.frame(merged_df)
 
 ```
 
