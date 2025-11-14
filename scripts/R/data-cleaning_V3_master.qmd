@@ -1,102 +1,83 @@
 ---
-title: "data_cleaning_v3"
-author: "group 5" 
-date: "12/11/2025
+title: "data_cleaning_v4"
 format: html
 ---
-#Data cleaning of IMPC data
 
-##Imports & setting for data cleaning
-
-1. **Set the current directory and locate the directory containing all CSV files.**  
-2. **Define the column name order of the master CSV file.**  
-3. **Create an empty `dfs` list to store all the data.**  
-4. **Iterate through all CSV files using a `for` loop:**  
-   1. Read the CSV file — ensure `header = FALSE` (for later column naming).  
-   2. Transpose the data — columns become rows (cases), rows become columns (categories).  
-      - Ensure it is done with `as.data.frame`.  
-   3. Assign new column names — use the first row after transposition.  
-   4. Remove the original header row of the data frame (it will be `V1, V2, V3, ...` because `header = FALSE`) — remove it.  
-   5. Check whether the columns follow the same order and whether any data values are missing in the CSV file:  
-      - Create a variable `col` and iterate through `col_names` (the list of column titles made earlier).  
-      - If `col != col_name` or is empty, replace with `NA`.  
-        - Use `df_t[[col]]` (square brackets) to create/modify the column.  
-   6. Reorder and match the column order of `df_t` to `col_order`.  
-   7. Append the CSV (`df_t` from the current loop iteration) to `dfs` and increment the list length for the next iteration.  
-5. **Bind all rows (cases) of the list into a single data frame (longer result).**  
-6. **Ensure MGI and mouse strain are uppercase.**
+**PREP data for cleaning**
+1. establish current directory and find directory of all CSV files 
+2. establish the column name order of master CSV file 
+3. create an empty dfs list
+4. start a For loop:
+  5. read CSV file - ensure HEADERS False (for later column naming)
+  6. transpose the data - columns turn into rows (data), rows turn into columns (column names)
+    a.ensure it is done as.data.frame
+  8. Assign new column names - first row after transposition
+  9. remove original HEADER row  of data frame of that CSV file is V1,V2,V3 ETC (bc of header FALSE) - so REMOVE IT 
+  10. Do the columns follow the same order, are any data values missing in the CSV file?
+    a. For loop - create variable col - and iterate through col_names (list of column titles made earlier)
+    b. if col != col_name = empty = replace with NA
+      i. df_t[[col]] - square bracket - changes an element
+  11. Then re-order and match the column order of dfs as col_order
+  12. Add the CSV file from df_t for loop iteration into the dfs + add 1 more row to the length of dfs (for next)
+  13. Bind all rows of list into dataframe - makes longer result.
+  14. Ensure MGI + Mouse strain is uppercase uppercase
 
 
 ```{r}
-# Data cleaning of IMPC pipeline
-# Objetive: process all the IMPC files into a single df, fix headers, transpose, fix col. order, verify using SOP
-# Input: IMPC csv files (~30k)
-# Output: Merged df
+library(tidyverse)
+library(tidyr)
 
-#packages importation
-library(tidyverse) #tidyverse has a collection of packages as ggplot2, tidyr, dplyr, etc.
-                  #these packages are essential to process the data in this project 
+#generate random sample of 10% of data (~29k files) to work with - for initial stages of analysis
+set.seed(88880888)
+working_data <- sample(all_data, 300, replace = FALSE, prob = NULL)
 
 
-set.seed(88880888) #setting of seed for random selection.
-
-#====Working_data(10% of data)==========================
-
-#Generate random sample of 10% of data (~29k files) to work with - for initial stages of analysis.
-#A random subset from all the data was selected as a working_data to ease the work, and not need to work...
-#... with all the data at once. Which was beneficial because we manage to scale the script from a small batch to a the big one.
-
-#working_data <- sample(all_data, 300, replace = FALSE, prob = NULL)
-#early-stage sampling command, saved
-
-
-#====Path and structure================================
-
-# locate directory with all IMPC CSV.
-# Remember to change path to your own.
+# locate file 
 all_data<- list.files(pattern = '*.csv',path = "../group5/data/", full.names = TRUE)
-# stores all IMPC CSV path inside a list
 
-# Defining order of columns
+
+
+#desired order of columns established
 col_order <- c("gene_accession_id","analysis_id", "gene_symbol", "mouse_strain", "mouse_life_stage", "parameter_id", "parameter_name" , "pvalue")
 
-
-#====Iterate CSV content into a single df =====================
 
 dfs <- list() #make an empty list for the loop
 
 for (path in all_data){ # for each file in the data
-
   df <- read.csv(path, header = FALSE, stringsAsFactors = FALSE)
   #header = FALSE: V1,V2,V3,V4 are the HEADERS 
-  # r reads the files - after transposing - as FIRST ROW OF DATA = later becoming the column names
+    # r reads the files - after transposing - as FIRST ROW OF DATA = later becoming the column names
   
+  #transpose the file data as a dataframe into dfs
+  df_t <- as.data.frame(t(df), stringsAsFactors = FALSE)
   
-  df_t <- as.data.frame(t(df), stringsAsFactors = FALSE) #Transpose the file data as a dataframe into dfs. Because                                                           the IMPC data CSV had the cases in columns instead of                                                             rows
   colnames(df_t) <- df_t[1,]   #ASSIGNING COLUMN NAMES - as  first row after transposition
-  df_t <- df_t[-1, ]          #Removing the original header row
+  df_t <- df_t[-1, ] #removing the original header row
   
-  for (col in col_order){ # create variable called col so that it can iterate                               through col_order of files
+  for (col in col_order){ # create variable called col so that it can iterate through col_order of files
     if (!col %in% colnames(df_t)){
-      df_t[[col]] <- NA # ensure all csv files have same columns by adding                              missing ones NA, so that they can be merged row-wise
-                        # ensure that all columns exists
+      df_t[[col]] <- NA # ensure all csv files have same columns by adding missing ones NA, so that they can be merged row-wise
+
       #col - already represented as one of the col_order variables which IF THEY ARE NOT one of the colnames in df_t, then create an NA group for it in that area
     }
   }
 
   
-  df_t <- df_t[,col_order] #re-order and match the columns in the same order                              as col_order
+  df_t <- df_t[,col_order] #re-order and match the columns in the same order as col_order
   #add row to list
   dfs[[length(dfs) + 1]] <- df_t
   # puts the df_t csv file (from this current for loop iteration) into the dfs list
   # stores the WHOLE DATAFRAME as one item in the list
 }
   
-#====Merged all files ============================================
+
 merged_df <- bind_rows(dfs) # binds rows
 
+# Write output to new CSV
+write.csv(merged_df, "merged_transposed.csv", row.names = FALSE)
+merged_df <- as.data.frame(merged_df)
 
-#====Quick NA finder=============================================
+##################find all NA values######################################
 na_counts <- lapply(merged_df, function(x) sum(is.na(x)))
 print(na_counts)
 
@@ -104,21 +85,17 @@ na_df <- data.frame(column = names(na_counts),
                     na_count =  as.numeric(na_counts)
 )
 
-#loop helps to find inconsistancies - sometimes lower/upper case changes in mouse_life_stage or mouse_Strain
-# and for finding NA's in these categories
+#loop helps to find inconsistancies - sometimes lower/upper case changes in mouse_life_stage or mouse_Strain# and for finding NA's in these categories
 names <- c("mouse_strain", "mouse_life_stage")
 for (x in names){
   print(unique(merged_df[[x]]))
 }
 
-#standarize header casing
-colnames(merged_df) <- tolower(colnames(merged_df))#Ensure all column headers are lowercase
 
-
-
-#====Write output to new CSV=========================
-write.csv(merged_df, "merged_transposed.csv", row.names = FALSE)
-merged_df <- as.data.frame(merged_df)
+colnames(merged_df) <- tolower(colnames(merged_df))
+#Ensure all column headers are lowercaseu
+merged_df_copy <- merged_df
+view(merged_df)
 
 ```
 
@@ -209,7 +186,6 @@ merged_df$gene_accession_id[gene_acc_cvd]
 
 merged_df$gene_accession_id <- str_trim(merged_df$gene_accession_id) # this ensures the values are uniform and similar to the dis_inf - MGI_ID
 merged_df$gene_accession_id <- toupper(merged_df$gene_accession_id) # upper case
-merged_df$gene_accession_id <- gsub("MGI:", "", merged_df$gene_accession_id)
 
 view(merged_df)
 ```
@@ -235,8 +211,17 @@ strain_cvd <- cvd(merged_df$mouse_strain, sop$mouse_strain)
 merged_df$mouse_strain[strain_cvd]
 
 # they are a mix of NA and GENES WHICH ARE NOT ENTAILED ON THE SOP GIVEN LIST
+
+viable_strains <- c(NA, "C57BL")
+merged_df$mouse_strain[!merged_df$mouse_strain %in% viable_strains] <- NA
+#mouse strain NOT in viable strain - then turn into NA
+
 unique(merged_df$mouse_strain)
+
+  
 merged_df$mouse_strain <- toupper(merged_df$mouse_strain) # convert the strains to upper case for consistency 
+
+view(merged_df)
 
 ```
 
@@ -402,10 +387,10 @@ dis_inf$omim_id <- gsub("OMIM:", "", dis_inf$omim_id)
 dis_inf$do_disease_id <- gsub("DOID:", "", dis_inf$do_disease_id)
 dis_inf$mouse_mgi_id <- str_trim(dis_inf$mouse_mgi_id) # ensures that the data MGI mateches with gene accession ID from merged_df
 dis_inf$mouse_mgi_id <- toupper(dis_inf$mouse_mgi_id) # ensures that data is upper case to match gene accession ID
-dis_inf$mouse_mgi_id <- gsub("MGI:", "", dis_inf$mouse_mgi_id)
+#dis_inf$mouse_mgi_id <- gsub("MGI:", "", dis_inf$mouse_mgi_id)
 
 #re-order to the column names so that MGI ID is at the beginning - easier for SQL team
-colnames(dis_inf)<- c("mouse_mgi_id", "do_disease_id", "do_disease_name", "omim_id")
+colnames(dis_inf)<- c("do_disease_id", "do_disease_name", "omim_id", "gene_accession_id")
 
 for (z in colnames(dis_inf)){
   if (!z %in% colnames(dis_inf)){
@@ -417,6 +402,7 @@ for (z in colnames(dis_inf)){
 count_dis_inf_na <- lapply(dis_inf, function(x) sum(is.na(x)))
 print(count_dis_inf_na)
 # NO NA's
+view(dis_inf)
 
 ```
 
@@ -519,14 +505,13 @@ view(merged_df)
 view(procedure)
 view(dis_inf)
 
-#created a copy of dis_inf so no changes were made to original
-copy_dis_inf <- dis_inf
-colnames(copy_dis_inf) <- c("gene_accession_id", "do_disease_id", "do_disease_name", "omim_id")#clarify column names
+
 
 #THIS IS IMPORTANT! : inner_join() works with COMMON NAMES OF COLUMNS (rename mouse_mgi_id to gene_accession_id)
 
-mdf_di <- inner_join(merged_df, copy_dis_inf, by = "gene_accession_id")
+mdf_di <- inner_join(merged_df, dis_inf, by = "gene_accession_id", relationship = "many-to-many")
 #run merged_df(mdf) and dis_inf (di) = mdf_di 
+nrow(mdf_di)
 
 
 #IPD_CSV + PROCEDURE - PARAMETER_ORIGIN_ID LINK
@@ -561,11 +546,25 @@ nrow(ipd_mdf) # check if there are any overlaps
 
 ```
 
-#Saving and exporting dataframes as csv files #
+#Saving and exporting dataframes as csv files + SQL tailored #
 
 ```{r}
+
+
 #for merged_df - remove all the V.. at the beginning as row names, not needed
 rownames(merged_df) <- NULL
+
+#FINAL FIX - no NA use blank spaces for SQL 
+merged_df$pvalue <- as.numeric(merged_df$pvalue)
+
+merged_df[is.na(merged_df)] <- ""
+
+procedure[is.na(procedure)] <- ""
+
+ipd_csv[is.na(ipd_csv)] <- ""
+
+dis_inf[is.na(dis_inf)] <- ""
+
 
 #get current working directory to know where to save the csv files to:
 getwd()
