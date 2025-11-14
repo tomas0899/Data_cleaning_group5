@@ -561,7 +561,17 @@ merged_df[is.na(merged_df)] <- ""
 
 procedure[is.na(procedure)] <- ""
 
+str(ipd_csv[117, ])
+
+ipd_csv[] <- lapply(ipd_csv, function(x) { # loops over function and x represents each columns (lapply treats ipd_csv as a list of columns)
+  if (is.character(x)) x[x == "NA"] <- "" # checks if cholumn x is type of character - character can have 'NA' as string instead of factor
+  x  # return modified column 
+})
+
 ipd_csv[is.na(ipd_csv)] <- ""
+ # replace all underscores with spaces
+
+view(ipd_csv)
 
 dis_inf[is.na(dis_inf)] <- ""
 
