@@ -57,7 +57,7 @@ set.seed(88880888) #setting of seed for random selection.
 
 # locate directory with all IMPC CSV.
 # Remember to change path to your own.
-all_data<- list.files(pattern = '*.csv',path = "../group5/data/", full.names = TRUE)
+all_data<- list.files(pattern = '*.csv',path = "/Users/tpocho/Desktop/Applied Bioinfo/Data_clean/coursework_group/group5/data/group5_data/Group5/data", full.names = TRUE)
 # stores all IMPC CSV path inside a list
 
 # Defining order of columns
@@ -255,7 +255,6 @@ gene_symb_sop_datafield_check <- sop_datafield_checker(merged_df$gene_symbol, so
 The sop_datafield_checker function is used for verifying that the dataField follow the rules given in the SOP
 
 ```{r}
-##THIS ONE NEEDS TO BE DISCUSSED!!!
 strain_sop_datafield_check <- sop_datafield_checker(merged_df$mouse_strain, sop$mouse_strain)
 merged_df$mouse_strain[strain_sop_datafield_check]
 
@@ -323,7 +322,7 @@ merged_df$pvalue <- as.numeric(merged_df$pvalue)
 merged_df$pvalue <- pmin(pmax(merged_df$pvalue, 0), 1)
 
 # Check which rows are out-of-range according to SOP
-pval_sop_datafield_checker <- sop_datafield_checker(merged_df$pvalue, sop$pvalue)
+pval_sop_datafield_check <- sop_datafield_checker(merged_df$pvalue, sop$pvalue)
 
 # Replace bad p-values with NA
 merged_df$pvalue[pval_sop_datafield_check] <- NA
@@ -384,11 +383,11 @@ param_sop_datafield_check <-sop_datafield_checker(merged_df$parameter_id , sop$p
 print(param_sop_datafield_check)
 
 # Check parameter_name
-par_name_sop_datafield_check <- sop_datafield_check(merged_df$parameter_name , sop$parameter_name)
+par_name_sop_datafield_check <- sop_datafield_checker(merged_df$parameter_name , sop$parameter_name)
 print(par_name_sop_datafield_check)
 
 # Check pvalue
-pval_sop_datafield_check <- sop_datafield_check(merged_df$pvalue, sop$pvalue)
+pval_sop_datafield_check <- sop_datafield_checker(merged_df$pvalue, sop$pvalue)
 print(pval_sop_datafield_check)
 
 
@@ -440,7 +439,7 @@ ggplot(na_df, aes(reorder(column, -na_count), y = na_count))+
 #==== Disease_information.csv — Cleaning =======================================
 
 # load Disease information csv
-dis_inf <- read.csv("../group5/Disease_information.csv", header = TRUE, sep =",", stringsAsFactors = FALSE)
+dis_inf <- read.csv("/Users/tpocho/Desktop/Applied Bioinfo/Data_clean/coursework_group/group5/data/group5_data/Group5/Disease_information.txt", header = TRUE, sep =",", stringsAsFactors = FALSE)
 
 # Define column names
 column_names<- c("do_disease_id", "do_disease_name", "omim_id", "mouse_mgi_id")
