@@ -1,2 +1,6 @@
 # Project: Data Cleaning and Data Managment 
-# members: tomas, tolga, kwan, jag, nabiha
+Members: Jagmeet, Kwan, Nabiha, Tomás, Tolga
+Group: 5
+
+
+
