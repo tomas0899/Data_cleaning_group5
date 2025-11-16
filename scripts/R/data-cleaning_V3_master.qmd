@@ -300,7 +300,7 @@ unique(merged_df$mouse_life_stage)
 The sop_datafield_checker function is used for verifying that the dataField follow the rules given in the SOP
 
 ```{r}
-#no errors#
+#no errors
 
 param_sop_datafield_check <-sop_datafield_checker(merged_df$parameter_id , sop$parameter_id)
 par_name_sop_datafield_check <- sop_datafield_checker(merged_df$parameter_name , sop$parameter_name)
@@ -319,7 +319,12 @@ The sop_datafield_checker function is used for verifying that the dataField foll
 merged_df$pvalue <- as.numeric(merged_df$pvalue)
 
 # Clamp values to [0,1] first
-merged_df$pvalue <- pmin(pmax(merged_df$pvalue, 0), 1)
+#merged_df$pvalue <- pmin(pmax(merged_df$pvalue, 0), 1) # DElete?
+
+merged_df <- merged_df %>% 
+  filter(pvalue > 0 & pvalue < 1)
+
+
 
 # Check which rows are out-of-range according to SOP
 pval_sop_datafield_check <- sop_datafield_checker(merged_df$pvalue, sop$pvalue)
@@ -424,22 +429,25 @@ print(na_counts)
 
 # Plot NA distribution across columns
 ggplot(na_df, aes(reorder(column, -na_count), y = na_count))+
-  geom_histogram(stat = 'summary')
+  geom_histogram(stat = 'summary') + labs (x = "Data fields", y = "Number of NA values", title = "NA count per column" ) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```
 
 
-## IMPC Disease information csv - CLEANING
+## IMPC Disease information csv/tsv - CLEANING
 
 1. Ensure that the column order is as specified 
 2. Remove multiple OMIM's from one row into separate rows 
 
 
 ```{r}
-#==== Disease_information.csv — Cleaning =======================================
+#==== Disease_information.csv (dis_inf) — Cleaning =======================================
 
 # load Disease information csv
-dis_inf <- read.csv("/Users/tpocho/Desktop/Applied Bioinfo/Data_clean/coursework_group/group5/data/group5_data/Group5/Disease_information.txt", header = TRUE, sep =",", stringsAsFactors = FALSE)
+#dis_inf <- read.csv("/Users/tpocho/Desktop/Applied Bioinfo/Data_clean/coursework_group/group5/data/group5_data/Group5/Disease_information.txt", header = TRUE, sep =",", stringsAsFactors = FALSE)
+# load Disease information TSV
+dis_inf = read_tsv("/Users/tpocho/Desktop/Applied Bioinfo/Data_clean/coursework_group/group5/data/group5_data/Group5/Disease_information.txt")
 
 # Define column names
 column_names<- c("do_disease_id", "do_disease_name", "omim_id", "mouse_mgi_id")
@@ -485,9 +493,9 @@ view(dis_inf)
 ## IMPC Procedure Cleaning csv - Cleaning
 
 ```{r}
-#==== IMPC Procedure Cleaning csv — Cleaning ===========================================
+#==== IMPC Procedure Cleaning csv (procedure) — Cleaning ===========================================
 
-procedure <- read.csv("../group5/impc_procedure.csv", header = TRUE, sep = ";")
+procedure <- read.csv("/Users/tpocho/Desktop/Applied Bioinfo/Data_clean/coursework_group/group5/data/group5_data/Group5/IMPC_procedure.csv", header = TRUE, sep = ";")
 # csv Inspection
 view(procedure)
 unique(procedure$impcParameterOrigId)
@@ -533,10 +541,10 @@ view(procedure)
 ## IMPC Parameter Description - Cleaning
 
 ```{r}
-#==== IMPC Parameter Description — Cleaning =================================
+#==== IMPC Parameter Description (ipd)— Cleaning =================================
 
 # Load IMPC Parameter Description file 
-ipd_csv<- read.csv("../group5/IMPC_parameter_description.txt", header = TRUE)
+ipd_csv<- read.csv("/Users/tpocho/Desktop/Applied Bioinfo/Data_clean/coursework_group/group5/data/group5_data/Group5/IMPC_parameter_description.txt", header = TRUE)
 
 # Set colnames to lowercase, consistency reasons 
 colnames(ipd_csv)<- tolower(colnames(ipd_csv))
@@ -551,6 +559,13 @@ check_param_origin_id <- !as.integer(ipd_csv$impcparameterorigid)
 if (any(check_param_origin_id)){
   print(check_param_origin_id)
 }
+# Removing duplicated in parameter orig id column
+
+ipd_csv %>% # counting the number of duplicated
+  filter(duplicated(impc_parameter_orig_id))
+# erasing duplicates
+ipd_csv = ipd_csv[!duplicated(ipd_csv$impc_parameter_orig_id),]
+sum(duplicated(ipd_csv$impc_parameter_orig_id)) #checking the number of duplicates
 
 # Keeps only rows where 'name' contains at least one digit
 non_strings_name <- ipd_csv[grepl("\\d+", ipd_csv$name), ] 
@@ -688,19 +703,54 @@ view(ipd_csv)
 getwd()
 
 #save merged_df as csv for export:
-write.csv(merged_df, "../csv_data_files/merged_df.csv", row.names = FALSE)
+write.csv(merged_df, "merged_df.csv", row.names = FALSE)
 
 #save procedure as csv for export
-write.csv(procedure, "../csv_data_files/procedure.csv", row.names = FALSE)
+write.csv(procedure, "procedure.csv", row.names = FALSE)
 
 #save ipd_csv as csv for export
-write.csv(ipd_csv, "../csv_data_files/ipd.csv", row.names = FALSE)
+write.csv(ipd_csv, "ipd.csv", row.names = FALSE)
 
 #save dis_inf as csv for export
-write.csv(dis_inf, "../csv_data_files/dis_inf.csv", row.names = FALSE)
+write.csv(dis_inf, "dis_inf.csv", row.names = FALSE)
 
 
 ```
+## Extra check for Primary Keys
+```{r}
 
+# MERGED_DF --> analysis id
+
+merged_df %>%
+  filter(duplicated(analysis_id))
+sum(duplicated(merged_df$analysis_id))
+
+
+# IPD
+ipd_csv %>%
+  filter(duplicated(impc_parameter_orig_id))
+#ipd_csv = ipd_csv[!duplicated(ipd_csv$impc_parameter_orig_id),]
+sum(duplicated(ipd_csv$impc_parameter_orig_id))
+
+# Procedure
+procedure %>%
+  filter(duplicated(impc_parameter_orig_id))
+sum(duplicated(procedure$impc_parameter_orig_id))
+
+# disease
+
+dis_inf %>%
+  filter(duplicated(do_disease_id))
+sum(duplicated(procedure$impc_parameter_orig_id))
+# one single human illness could be mapped in various genes from a mouse
+# that is why multiple rows have the same OMIM but different MGI
+
+dis_inf %>%
+  filter(duplicated(gene_accession_id))
+# a single gene can be associated with many diseases
+# and viceversa 
+
+
+```
 
 
