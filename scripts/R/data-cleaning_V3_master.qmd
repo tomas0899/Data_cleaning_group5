@@ -562,10 +562,11 @@ if (any(check_param_origin_id)){
 # Removing duplicated in parameter orig id column
 
 ipd_csv %>% # counting the number of duplicated
-  filter(duplicated(impc_parameter_orig_id))
+  filter(duplicated(impcparameterorigid))
+
 # erasing duplicates
-ipd_csv = ipd_csv[!duplicated(ipd_csv$impc_parameter_orig_id),]
-sum(duplicated(ipd_csv$impc_parameter_orig_id)) #checking the number of duplicates
+ipd_csv = ipd_csv[!duplicated(ipd_csv$impcparameterorigid),]
+sum(duplicated(ipd_csv$impcparameterorigid)) #checking the number of duplicates
 
 # Keeps only rows where 'name' contains at least one digit
 non_strings_name <- ipd_csv[grepl("\\d+", ipd_csv$name), ] 
