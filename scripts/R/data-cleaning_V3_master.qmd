@@ -113,7 +113,7 @@ print(na_counts)
 na_df <- data.frame(column = names(na_counts),
                     na_count =  as.numeric(na_counts)
 )
-
+# The na_df is used later in the NA and duplicates section to visualize NA counts.
 #loop helps to find inconsistencies - sometimes lower/upper case changes in mouse_life_stage or mouse_Strain
 # and for finding NA's in these categories
 names <- c("mouse_strain", "mouse_life_stage")
@@ -236,7 +236,7 @@ merged_df$gene_accession_id <- str_trim(merged_df$gene_accession_id) # this ensu
 merged_df$gene_accession_id <- toupper(merged_df$gene_accession_id) # upper case
 merged_df$gene_accession_id <- gsub("MGI:", "", merged_df$gene_accession_id)
 
-view(merged_df)
+#view(merged_df)
 ```
 
 ### Gene symbol SOP normalisation check
@@ -319,7 +319,7 @@ The sop_datafield_checker function is used for verifying that the dataField foll
 merged_df$pvalue <- as.numeric(merged_df$pvalue)
 
 # Clamp values to [0,1] first
-#merged_df$pvalue <- pmin(pmax(merged_df$pvalue, 0), 1) # DElete?
+#merged_df$pvalue <- pmin(pmax(merged_df$pvalue, 0), 1) 
 
 merged_df <- merged_df %>% 
   filter(pvalue > 0 & pvalue < 1)
@@ -460,7 +460,7 @@ dis_inf <- dis_inf %>%
   # ~ = function(x) abbreviation on column names, 
   separate_rows(omim_id, sep = "\\|") 
 
-# Clean and normalise id. datafields
+# Clean and normalize id. datafields
 # Below - remove the OMIM and DOID words before the numerical value since they are common in all rows
 dis_inf$omim_id <- gsub("OMIM:", "", dis_inf$omim_id)
 dis_inf$do_disease_id <- gsub("DOID:", "", dis_inf$do_disease_id)
@@ -608,10 +608,11 @@ view(ipd_csv)
 
 ```{r}
 # Inspect cleaned tables
-view(ipd_csv)
-view(merged_df)
-view(procedure)
-view(dis_inf)
+# uncomment if necessary
+# view(ipd_csv)
+# view(merged_df)
+# view(procedure)
+# view(dis_inf)
 
 
 # JOIN 1: merged_df x dis_inf (gene_accession_id as key)
@@ -619,7 +620,7 @@ view(dis_inf)
 # THIS IS IMPORTANT! : inner_join() works with COMMON NAMES OF COLUMNS (rename mouse_mgi_id to gene_accession_id)
 
 mdf_di <- inner_join(merged_df, dis_inf, by = "gene_accession_id", relationship = "many-to-many")
-#run merged_df(mdf) and dis_inf (di) = mdf_di 
+# run merged_df(mdf) and dis_inf (di) = mdf_di 
 # Number of matched rows between merged_df x dis_inf
 nrow(mdf_di)
 
@@ -682,6 +683,8 @@ procedure[is.na(procedure)] <- ""
 dis_inf[is.na(dis_inf)] <- ""
 
 # Manual inspection (debugging)
+
+#uncomment if necessary 
 str(ipd_csv[117, ])
 
 # Convert NA string into empty strings
