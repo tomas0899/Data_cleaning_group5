@@ -1,10 +1,14 @@
 library(tidyverse)
 library(shiny)
+
 library(ggplot2)
 library(matrixStats)
+
 library(stringr)
 library(dplyr)
+
 library(tidyr)
+
 library(factoextra)
 
 #install.packages("DBI")
@@ -13,7 +17,7 @@ library(factoextra)
 #setwd("C:/Users/jagmeet/dcdm_app")
 
 # Load merged data from CSV
-merged_df <- read.csv("merged_df.csv", header = TRUE, stringsAsFactors = FALSE)
+merged_df <- read.csv("/Users/tpocho/Desktop/Applied\ Bioinfo/Data_clean/Github/Data_cleaning_group5/scripts/R/merged_df.csv", header = TRUE, stringsAsFactors = FALSE)
 
 ## This section explains Part 1 of the app:
 ## Module 1 = plot all parameter_name values tested for each gene_symbol
@@ -49,10 +53,17 @@ ui <- fluidPage(
     # All user inputs go into sidebarPanel()
     sidebarPanel(
       # Dropdown menu for selecting 1 of 4 query genes
-      selectInput("4 gene_symbol",
-                  "Select gene_symbol :",
+      selectInput("query_gene",
+                  "Select one of 4 query genes:",
                   choices  = c("Ica1", "Dclk1", "Lpcat1", "Irag2"),
                   multiple = FALSE),
+      # Slider for significance threshold (Module 1)
+      sliderInput("pvalue_1", 
+                  "Significance threshold for gene → phenotype:",
+                  min= 0,
+                  max = 1,
+                  value = 0.05),
+      
       
       # Dropdown menu for selecting phenotypic parameter
       selectInput("parameter_name",
@@ -60,28 +71,32 @@ ui <- fluidPage(
                   choices  = parameter_name_list,
                   multiple = FALSE),
       
-      # Slider for significance threshold (Module 1)
-      sliderInput("pvalue_1", "Significance threshold for gene → phenotype:",
-                  min= 0,
-                  max = 1,
-                  value = 0.05),
-      
       # Slider for significance threshold (Module 2)
-      sliderInput("pvalue_2", "Significance threshold for phenotype → gene:",
+      sliderInput("pvalue_2", 
+                  "Significance threshold for phenotype → gene:",
                   min=0,
                   max = 1,
                   value = 0.05),
+      
+      
       
       # Selector for number of clusters in PCA tab
       selectInput("number_of_clusters",
                   "number_of_clusters :",
                   choices  = number_of_clusters,
                   multiple = FALSE),
-    
-      selectInput(" gene_symbols",
-                  "Select gene_symbol :",
-                  choices  = gene_symbol_list,
-                  multiple = FALSE),
+      
+      # Second selector: choose any gene from the full gene list (used by last plot)
+      selectInput("gene_symbol",
+                  "Select gene (from all genes):",
+                  choices = gene_symbol_list),
+      # Slider for significance threshold (Module 1)
+      sliderInput("pvalue_3", 
+                  "Significance threshold for gene → phenotype:",
+                  min= 0,
+                  max = 1,
+                  value = 0.05),
+      
     ),
     
     # Main output panel (plots)
@@ -93,7 +108,7 @@ ui <- fluidPage(
                  plotOutput("sig_ko")),
         
         # Tab 2 = significant genes for a phenotype
-        tabPanel("module2 = sig_gene_ko", 
+        tabPanel("module2 = significant gene knockout for selected paramater name", 
                  plotOutput("sig_gene_ko")),
         
         # Tab 3 = PCA plot
@@ -101,69 +116,75 @@ ui <- fluidPage(
                  plotOutput("PCA")),
         
         # Tab 4 = significant phenotypes for genes
-        tabPanel("module 1 = all_sig_ko", 
+        tabPanel("module 4 = significant phenotypes for selected gene", 
                  plotOutput("all_sig_ko")),
       )
     )
   )
 )
 
+
 # Shortcut reference to full dataset, used inside server
 sig_rows <- merged_df
 
 
-# --- SERVER SECTION ---
-# This function controls all computations and plotting
+# --- SERVER SECTION --- controls computational and plotting scripts
 server <- function(input, output){
   
   # --- Module 1 reactive filter ---
-  # Filters rows based on selected gene + significance threshold
+  # Filters rows based on selected gene + significance threshold + ensures that it only works if there is an input
   filter_gene <- reactive({
+    req(input$query_gene)
     sig_rows %>%
       filter(
-        str_to_sentence(gene_symbol) == str_to_sentence(input$gene_symbol),  # match gene symbol
-        pvalue < input$pvalue_1                                             # apply significance threshold
+        str_to_sentence(gene_symbol) == str_to_sentence(input$query_gene),  # match gene symbol
+        pvalue < input$pvalue_1 # apply significance threshold
       )
   })
   
   
   # --- Plot for Module 1 ---
   output$sig_ko <- renderPlot({
+    
     # Call reactive filtered dataset
     filter_gene_plot <- filter_gene()
     
-    # CASE: no significant phenotype parameters found
+    # inCASE: no significant phenotype parameters found
     if (nrow(filter_gene_plot) == 0) {
       return(
         plot(NULL, xlim=c(0, 1), ylim=c(0, 1), type='n', axes=FALSE, ann=FALSE) + 
           text(0.5, 0.5, "No significant phenotypes found for this gene.", cex=1.5)
       )
+    } else{
+      # Plot barplot of significant parameter_names for selected gene
+      ggplot(filter_gene_plot,
+             aes(x = reorder(parameter_name, -pvalue),  # order by significance
+                 y = pvalue)) +  
+        geom_col(color = "red")+              # draw bars
+        coord_flip() +                                  # horizontal bars
+        labs(x = "parameter_name", 
+             y = "p val", 
+             title = paste("Significant phenotypes for", input$gene_symbol)) + 
+        theme_minimal()
     }
-    
-    # Plot barplot of significant parameter_names for selected gene
-    ggplot(filter_gene_plot,
-           aes(x = reorder(parameter_name, -pvalue),  # order by significance
-               y = pvalue)) +  
-      
-      geom_col(color = "red", size = 3)+              # draw bars
-      coord_flip() +                                  # horizontal bars
-      labs(x = "parameter_name", 
-           y = "p val", 
-           title = paste("Significant phenotypes for", input$gene_symbol))
   })
   
   
   # --- Module 2: significant genes for selected phenotype ---
+  
+  # Put the phenotype filter outside the renderPlot (optional but cleaner)
+  filter_pheno <- reactive({
+    req(input$parameter_name)
+    sig_rows %>%
+      filter(
+        tolower(parameter_name) == tolower(input$parameter_name),
+        pvalue < input$pvalue_2
+      )
+  })
+  
+  # --- Plot for Module 2 ---
+  
   output$sig_gene_ko <- renderPlot({
-    
-    # Reactive function filtering for phenotype → gene
-    filter_pheno <- reactive({
-      sig_rows %>%
-        filter(
-          tolower(parameter_name) == tolower(input$parameter_name),  # match parameter
-          pvalue < input$pvalue_2                                    # significance threshold
-        )
-    })
     
     filter_pheno_plot <- filter_pheno()
     
@@ -173,17 +194,18 @@ server <- function(input, output){
         plot(NULL, xlim=c(0, 1), ylim=c(0, 1), type='n', axes=FALSE, ann=FALSE) + 
           text(0.5, 0.5, "No significant genes found for this parameter.", cex=1.5)
       )
+    } else {
+      # Barplot for significant genes
+      ggplot(filter_pheno_plot,
+             aes(x = reorder(gene_symbol, -pvalue),  # order by significance
+                 y = pvalue)) +
+        geom_col(color = "red")+          # draw bars
+        coord_flip() +
+        labs (x = "gene symbol",
+              y = "p val", 
+              title = paste("Significant genes for", input$parameter_name))+
+        theme_minimal()
     }
-    
-    # Barplot for significant genes
-    ggplot(filter_pheno_plot,
-           aes(x = reorder(gene_symbol, -pvalue),  # order by significance
-               y = pvalue)) +
-      geom_col(color = "red", size = 3)+          # draw bars
-      coord_flip() +
-      labs (x = "gene symbol",
-            y = "p val", 
-            title = paste("Significant genes for", input$parameter_name))
   })
   
   # --- PCA MODULE ---
@@ -211,6 +233,7 @@ server <- function(input, output){
       )
     
     # Step 4: Prepare matrix for PCA
+    matrix_sig_rows <- as.data.frame(matrix_sig_rows)
     rownames(matrix_sig_rows) <- matrix_sig_rows$gene_symbol  # make gene names row labels
     matrix_sig_rows <- matrix_sig_rows[, -1]                  # drop gene_symbol column
     
@@ -224,7 +247,7 @@ server <- function(input, output){
       gene_symbol = rownames(matrix_sig_rows)
     )
     
-    set.seed(888)                       # ensures repeatability
+    set.seed(888) # ensures reproducibility
     
     num_clusters <- as.integer(input$number_of_clusters)  # convert input to integer
     
@@ -246,31 +269,37 @@ server <- function(input, output){
   })
   
   
+  
+  
   output$all_sig_ko <- renderPlot({
-    # Call reactive filtered dataset
-    filter_gene_plot <- filter_gene()
+    req(input$gene_symbol)
+    
+    # Filter by the full-gene selector & pvalue threshold (use same threshold as module1 or choose separate)
+    filter_all_gene_plot <- sig_rows %>%
+      filter(str_to_sentence(gene_symbol) == str_to_sentence(input$gene_symbol),
+             pvalue < input$pvalue_3)  # using pvalue_3 threshold here; change if you want a different slider
     
     # CASE: no significant phenotype parameters found
-    if (nrow(filter_gene_plot) == 0) {
+    if (nrow(filter_all_gene_plot) == 0) {
       return(
         plot(NULL, xlim=c(0, 1), ylim=c(0, 1), type='n', axes=FALSE, ann=FALSE) + 
           text(0.5, 0.5, "No significant phenotypes found for this gene.", cex=1.5)
       )
+    } else {
+      # Plot barplot of significant parameter_names for selected gene
+      ggplot(filter_all_gene_plot,
+             aes(x = reorder(parameter_name, -pvalue),  # order by significance
+                 y = pvalue)) +  
+        
+        geom_col(color = "red")+              # draw bars
+        coord_flip() +                                  # horizontal bars
+        labs(x = "parameter_name", 
+             y = "p val", 
+             title = paste("Significant phenotypes for", input$gene_symbol))+
+        theme_minimal()
     }
-    
-    # Plot barplot of significant parameter_names for selected gene
-    ggplot(filter_gene_plot,
-           aes(x = reorder(parameter_name, -pvalue),  # order by significance
-               y = pvalue)) +  
-      
-      geom_col(color = "red", size = 3)+              # draw bars
-      coord_flip() +                                  # horizontal bars
-      labs(x = "parameter_name", 
-           y = "p val", 
-           title = paste("Significant phenotypes for", input$gene_symbol_list))
   })
 }
-
 
 # Launch final Shiny app
 shinyApp(ui = ui, server = server)
