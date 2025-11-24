@@ -17,7 +17,7 @@ library(factoextra)
 #setwd("C:/Users/jagmeet/dcdm_app")
 
 # Load merged data from CSV
-merged_df <- read.csv("/Users/tpocho/Desktop/Applied\ Bioinfo/Data_clean/Github/Data_cleaning_group5/scripts/R/merged_df.csv", header = TRUE, stringsAsFactors = FALSE)
+merged_df <- read.csv("merged_df.csv", header = TRUE, stringsAsFactors = FALSE)
 
 ## This section explains Part 1 of the app:
 ## Module 1 = plot all parameter_name values tested for each gene_symbol
@@ -164,7 +164,7 @@ server <- function(input, output){
         coord_flip() +                                  # horizontal bars
         labs(x = "parameter_name", 
              y = "p val", 
-             title = paste("Significant phenotypes for", input$gene_symbol)) + 
+             title = paste("Significant phenotypes for", input$query_gene)) + 
         theme_minimal()
     }
   })
