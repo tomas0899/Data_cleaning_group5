@@ -313,7 +313,7 @@ SELECT
     parameter_name,
     pvalue
 FROM merged_df
-WHERE gene_symbol = 'Ica1' AND pvalue < 0.05;
+WHERE gene_symbol = 'Dclk1' AND pvalue < 0.05;
 
 SELECT 
     gene_symbol,
@@ -322,7 +322,7 @@ SELECT
     parameter_name,
     pvalue
 FROM merged_df
-WHERE gene_symbol = 'Ica1' AND pvalue > 0.05;
+WHERE gene_symbol = 'Dclk1' AND pvalue > 0.05;
 
 
 
@@ -416,6 +416,7 @@ SELECT
     pvalue
 FROM merged_df
 WHERE gene_symbol IN ('Ica1', 'Dclk1', 'Lpcat1', 'Irag2') AND pvalue > 0.05;
+
 
 
 
